@@ -19,6 +19,7 @@ use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\Model\ListModel;
 use Joomla\CMS\Plugin\PluginHelper;
+use Joomla\Database\ParameterType;
 use Joomla\Filter\OutputFilter;
 
 // No direct access to this file
@@ -43,9 +44,8 @@ class AttachmentsModel extends ListModel
 	public function __construct($config = array())
 	{
 		if (empty($config['filter_fields'])) {
-			$config['filter_fields'] = array(
+			$config['filter_fields'] = [
 				'id',
-				'parent_id',
 				'a.state',
 				'a.access',
 				'a.filename',
@@ -55,13 +55,15 @@ class AttachmentsModel extends ListModel
 				'a.user_field_3',
 				'a.file_type',
 				'a.file_size',
-				'creator_name',
-				'modifier_name',
-				'u1.name',
 				'a.created',
 				'a.modified',
-				'a.download_count'
-			);
+				'a.download_count',
+				'a.created_by',
+				'a.parent_id',
+				'a.parent_type',
+				'a.parent_entity',
+				'a.display_name',
+			];
 		}
 
 		parent::__construct($config);
@@ -81,31 +83,206 @@ class AttachmentsModel extends ListModel
 		/** @var \Joomla\Database\DatabaseDriver $db */
 		$db = Factory::getContainer()->get('DatabaseDriver');
 		$query = $db->getQuery(true);
-		$id = $this->getState('filter.parent_id');
-		if (is_numeric($id))
+
+		// Select the required fields from the table.
+		$query->select(
+			$this->getState(
+				'list.select',
+				$db->qn(['a.id',
+						'a.filename',
+						'a.filename_sys',
+						'a.file_type',
+						'a.file_size',
+						'a.url',
+						'a.uri_type',
+						'a.url_valid',
+						'a.url_relative',
+						'a.url_verify',
+						'a.display_name',
+						'a.description',
+						'a.icon_filename',
+						'a.access',
+						'a.state',
+						'a.user_field_1',
+						'a.user_field_2',
+						'a.user_field_3',
+						'a.parent_type',
+						'a.parent_entity',
+						'a.parent_id',
+						'a.created',
+						'a.created_by',
+						'a.modified',
+						'a.modified_by',
+						'a.download_count',
+					]
+				)
+			)
+		)
+			->select(
+				[
+					$db->qn('uc.name', 'editor_name'),
+					$db->qn('ag.title', 'access_level'),
+					$db->qn('ua.name', 'creator_name'),
+				]
+			)
+			->from($db->qn('#__attachments', 'a'))
+			->join('LEFT', $db->qn('#__users', 'uc'), $db->qn('uc.id') . ' = ' . $db->qn('a.modified_by'))
+			->join('LEFT', $db->qn('#__viewlevels', 'ag'), $db->qn('ag.id') . ' = ' . $db->qn('a.access'))
+			->join('LEFT', $db->qn('#__users', 'ua'), $db->qn('ua.id') . ' = ' . $db->qn('a.created_by'));
+
+		$filterEntityParts = [];
+
+		// Filter by published state
+		$state = (string) $this->getState('filter.state');
+
+		if ((int) $this->getState('filter.listforparent', 0)) {
+			$parentId = $this->getState('filter.parent_id');
+			$parentType = $this->getState('filter.parent_type');
+			$parentEntity = $this->getState('filter.parent_entity');
+			$query
+				->where($db->qn('a.parent_id') . ' = :parent_id', 'AND')
+				->where($db->qn('a.parent_type') . ' = :parent_type', 'AND')
+				->where($db->qn('a.parent_entity') . ' = :parent_entity')
+				->bind(':parent_id', $parentId, ParameterType::INTEGER)
+				->bind(':parent_type', $parentType, ParameterType::STRING)
+				->bind(':parent_entity', $parentEntity, ParameterType::STRING);
+			}
+		else {
+			if (is_numeric($state))	{
+				$state = (int) $state;
+				$query
+					->where($db->qn('a.state') . ' = :state')
+					->bind(':state', $state, ParameterType::INTEGER);
+				}
+			elseif ($state === '') {
+				$query->whereIn($db->qn('a.state'), [0, 1]);
+				}
+
+			// Filter by search in title.
+			$search = $this->getState('filter.search');
+
+			$params = ComponentHelper::getComponent('com_attachments')->getParams();
+
+			if (!empty($search)) {
+				if (stripos($search, 'id:') === 0) {
+					$search = (int) substr($search, 5);
+					$query
+						->where($db->qn('a.id') . ' = :searchId')
+						->bind(':searchId', $search, ParameterType::INTEGER);
+					}
+				else {
+					$queryStr =
+							'('
+						. 'LOWER (a.filename) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false) . ' OR '
+						. 'LOWER (a.description) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false) . ' OR '
+						. 'LOWER (a.display_name) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false);
+					if (!empty($params->get('user_field_1_name', ''))) {
+						$queryStr .= 'OR LOWER (a.user_field_1) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false);
+						}
+					if (!empty($params->get('user_field_2_name', ''))) {
+						$queryStr .= 'OR LOWER (a.user_field_2) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false);
+						}
+					if (!empty($params->get('user_field_3_name', ''))) {
+						$queryStr .= 'OR LOWER (a.user_field_3) LIKE ' . $db->quote('%' . $db->escape($search, true) . '%', false);
+						}
+					$queryStr .= ')';
+
+					$query
+						->where(
+							$queryStr
+						);
+					}
+				}
+
+			$filterEntity = $this->getState('filter.parent_entity');
+
+			if (($filterEntity != '') && ($filterEntity != 'ALL')) {
+				$filterEntityParts = explode('.', $filterEntity);
+				$parentType = $filterEntityParts[0];
+				$parentEntity = $filterEntityParts[1];
+
+				$query
+					->where($db->qn('a.parent_type') . ' = ' . $db->quote($parentType))
+					->where($db->qn('a.parent_entity') . ' = ' . $db->quote($parentEntity));
+				}
+			}
+
+		$filterParentStateDefault = '';
+
+		$suppressObsoleteAttachments = $params->get('suppress_obsolete_attachments', false);
+
+		if ($suppressObsoleteAttachments)
 		{
-			$query->where('a.parent_id = ' . (int) $id);
+			$filterParentStateDefault = 'PUBLISHED';
 		}
-		$query->select('a.*, a.id as id');
-		$query->from('#__attachments as a');
 
-		$query->select('u1.name as creator_name');
-		$query->leftJoin('#__users AS u1 ON u1.id = a.created_by');
+		$filterParentState = $this->getState('filter.parent_state', $filterParentStateDefault);
 
-		$query->select('u2.name as modifier_name');
-		$query->leftJoin('#__users AS u2 ON u2.id = a.modified_by');
+		if (!empty($filterParentState)) {
+			$countFilterEntityParts = count($filterEntityParts);
 
-		// Add the where clause
-		$where = $this->_buildContentWhere($query);
-		if ($where) {
-			$query->where($where);
+			if (($filterParentState != '') && ($filterParentState != 'ALL') && ($countFilterEntityParts == 2 || $countFilterEntityParts == 0)) {
+				$fpsWheres = [];
+
+				// Get the contributions for all the known content types
+				PluginHelper::importPlugin('attachments');
+				$apm = AttachmentsPluginManager::getAttachmentsPluginManager();
+				$knownParentTypes = $apm->getInstalledParentTypes();
+
+				$pwheres = [];
+
+				foreach ($knownParentTypes as $parentType) {
+					$parent = $apm->getAttachmentsPlugin($parentType);
+
+					if ($countFilterEntityParts == 2) {
+						$pwheres = $parent->getParentPublishedFilter($filterParentState, $filterEntityParts[1]);
+					}
+					elseif ($countFilterEntityParts == 0) {
+						$pwheres = $parent->getParentPublishedFilter($filterParentState, 'ALL');
+					}
+
+					foreach ($pwheres as $pw) {
+						$fpsWheres[] = $pw;
+						}
+					}
+
+				if ($filterParentState == 'NONE') {
+					$fpsWheres = '( (a.parent_id = 0) OR (a.parent_id IS NULL) ' .
+						(count($fpsWheres) ? ' OR (' . implode(' AND ', $fpsWheres) . ')' : '') . ')';
+					}
+				else {
+					$fpsWheres = (count($fpsWheres) ? '(' . implode(' OR ', $fpsWheres) . ')' : '');
+				}
+
+				// Copy the new where clauses into our main list
+				if ($fpsWheres) {
+					$where[] = $fpsWheres;
+					$query->where($where);
+					}
+				}
 			}
 
-		// Add the order-by clause
-		$order_by = $this->_buildContentOrderBy();
-		if ($order_by) {
-			$query->order($db->escape($order_by));
+		$user = Factory::getApplication()->getIdentity();
+
+		if (!$user->authorise('core.admin')) {
+			$userLevels = array_unique($user->getAuthorisedViewLevels());
+			$query->whereIn('a.access', $userLevels);
+		}
+
+		// Add the list ordering clause.
+		$orderCol  = $this->state->get('list.ordering', 'a.id');
+		$orderDirn = $this->state->get('list.direction', 'DESC');
+		print_r($orderCol);
+		print_r($orderDirn);
+
+		$orderBy = "a.parent_type, a.parent_entity, a.parent_id";
+
+		if ($orderCol) {
+			$orderBy = "$orderCol $orderDirn, a.parent_entity, a.parent_id";
 			}
+		$ordering = $db->escape($orderBy) . ' ' . $db->escape($orderDirn);
+
+		$query->order($ordering);
 
 		return $query;
 	}
@@ -118,6 +295,7 @@ class AttachmentsModel extends ListModel
 	 * @access private
 	 * @return string
 	 * @since 1.0
+	 * NOTE function is obsolete with new filtering
 	 */
 	private function _buildContentWhere($query)
 	{
@@ -210,6 +388,7 @@ class AttachmentsModel extends ListModel
 	 * @access private
 	 * @return string
 	 * @since 1.0
+	 * NOTE function is obsolete with new filtering
 	 */
 	private function _buildContentOrderBy()
 	{
@@ -233,8 +412,9 @@ class AttachmentsModel extends ListModel
 	 * Note. Calling getState in this method will result in recursion.
 	 *
 	 * @since	1.6
+	 * NOTE changed name ('lagacy_' before) - function is unnecessary with new filtering
 	 */
-	protected function populateState($ordering = null, $direction = null)
+	protected function lagacy_populateState($ordering = null, $direction = null)
 	{
 		// Initialize variables.
 		/** @var \Joomla\CMS\Application\CMSApplication $app */
