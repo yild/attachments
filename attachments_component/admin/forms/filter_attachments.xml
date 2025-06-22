@@ -9,7 +9,7 @@
 			description="ATTACH_FILTER_SEARCH_DESC"
 			hint="JSEARCH_FILTER"
 		/>
-        <field
+		<field
 			name="state"
 			type="list"
 			label="JSTATUS"
@@ -19,15 +19,12 @@
 			validate="options"
 			onchange="this.form.submit();"
 			>
-            <option value="">JOPTION_SELECT_PUBLISHED</option>
-            <option value="1">JPUBLISHED</option>
-            <option value="0">JUNPUBLISHED</option>
-            <option value="2">JARCHIVED</option>
-		    <option value="-2">JTRASHED</option>
-		    <option value="*">JALL</option>
-        </field>
-		
-        <field
+			<option value="">JOPTION_SELECT_PUBLISHED</option>
+			<option value="1">JPUBLISHED</option>
+			<option value="0">JUNPUBLISHED</option>
+			<option value="*">JALL</option>
+		</field>
+		<field
 			name="parent_state"
 			type="list"
 			label="JSTATUS"
@@ -37,15 +34,14 @@
 			onchange="this.form.submit();"
 			validate="options"
 			>
-            <option value="">ATTACH_PARENTS_STATE</option>
-            <option value="PUBLISHED">ATTACH_PUBLISHED_PARENTS</option>
-            <option value="UNPUBLISHED">ATTACH_UNPUBLISHED_PARENTS</option>
-		    <option value="ARCHIVED">ATTACH_ARCHIVED_PARENTS</option>
-		    <option value="TRASHED">ATTACH_TRASHED_PARENTS</option>
-		    <option value="NONE">ATTACH_NO_PARENTS</option>
-        </field>
-
-        <field
+			<option value="">ATTACH_PARENTS_STATE</option>
+			<option value="PUBLISHED">ATTACH_PUBLISHED_PARENTS</option>
+			<option value="UNPUBLISHED">ATTACH_UNPUBLISHED_PARENTS</option>
+			<option value="ARCHIVED">ATTACH_ARCHIVED_PARENTS</option>
+			<option value="TRASHED">ATTACH_TRASHED_PARENTS</option>
+			<option value="NONE">ATTACH_NO_PARENTS</option>
+		</field>
+		<field
 			name="parent_entity"
 			type="list"
 			label="ATTACH_PARENT_TYPE"

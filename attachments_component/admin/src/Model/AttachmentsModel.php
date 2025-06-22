@@ -59,9 +59,9 @@ class AttachmentsModel extends ListModel
 				'a.modified',
 				'a.download_count',
 				'a.created_by',
-				'a.parent_id',
-				'a.parent_type',
-				'a.parent_entity',
+				'a.parent_id', 'parent_id',
+				'a.parent_type', 'parent_type',
+				'a.parent_entity', 'parent_entity',
 				'a.display_name',
 			];
 		}
