@@ -272,8 +272,6 @@ class AttachmentsModel extends ListModel
 		// Add the list ordering clause.
 		$orderCol  = $this->state->get('list.ordering', 'a.id');
 		$orderDirn = $this->state->get('list.direction', 'DESC');
-		print_r($orderCol);
-		print_r($orderDirn);
 
 		$orderBy = "a.parent_type, a.parent_entity, a.parent_id";
 
