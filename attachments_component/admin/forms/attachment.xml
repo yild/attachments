@@ -6,7 +6,9 @@
                readonly="true" class="readonly"
         />
         <field name="state" type="radio" default="0"
-               label="JPUBLISHED" description="">
+               label="JPUBLISHED" description=""
+               layout="joomla.form.field.radio.switcher"
+        >
             <option value="0">JNO</option>
             <option value="1">JYES</option>
         </field>
@@ -24,6 +26,7 @@
         />
         <field name="filename" type="file"
                label="ATTACH_FILENAME" description="ATTACH_FILENAME_DESCRIPTION"
+               showon="uri_type:file"
         />
         <field name="filename_sys" type="text"
                label="ATTACH_SYSTEM_FILENAME" description="ATTACH_SYSTEM_FILENAME_DESCRIPTION"
@@ -41,24 +44,39 @@
         <field name="icon_filename" type="Iconfilenames"
                label="ATTACH_ICON_FILENAME" description="ATTACH_ICON_FILENAME_DESCRIPTION"
         />
-        <field name="uri_type" type="text"
-               label="ATTACH_ATTACHMENT_TYPE" description=""
-               readonly="true" class="readonly"
-               size="10"
-        />
+
+        <field
+                name="uri_type"
+                type="radio"
+                label=""
+                description=""
+                layout="joomla.form.field.radio.switcher"
+                default="file"
+                validate="options"
+                onclick="toggle_url();"
+        >
+            <option value="file">ATTACH_ENTER_URL_INSTEAD</option>
+            <option value="url">ATTACH_SELECT_FILE_TO_UPLOAD_INSTEAD</option>
+        </field>
         <field name="url" type="text"
                readonly="true" class="readonly"
                label="ATTACH_URL" description="ATTACH_URL_DESCRIPTION"
                size="70"
+               showon="uri_type:url"
         />
         <field name="url_valid" type="radio"
-               label="ATTACH_URL_IS_VALID" description="ATTACH_URL_IS_VALID_TOOLTIP"
+               label="ATTACH_URL_IS_VALID"
+               description="ATTACH_URL_IS_VALID_TOOLTIP"
+               layout="joomla.form.field.radio.switcher"
+               showon="uri_type:url"
                default="1">
             <option value="0">JNO</option>
             <option value="1">JYES</option>
         </field>
         <field name="url_relative" type="radio"
                label="ATTACH_RELATIVE_URL" description="ATTACH_RELATIVE_URL_TOOLTIP"
+               layout="joomla.form.field.radio.switcher"
+               showon="uri_type:url"
                default="0">
             <option value="0">JNO</option>
             <option value="1">JYES</option>
@@ -106,5 +124,65 @@
                readonly="true" class="readonly"
                size="10"
         />
+        <field
+                name="access"
+                type="accesslevel"
+                label="JFIELD_ACCESS_LABEL"
+                description="JFIELD_ACCESS_DESC"
+                multiple="false"
+        >
+            <option value="">JOPTION_SELECT_ACCESS</option>
+        </field>
+        <field
+                name="parent_type_list"
+                type="list"
+                label="ATTACH_PARENT_TYPE"
+                description="ATTACH_PARENT_TYPE_DESCRIPTION"
+                default=""
+                filter="string"
+                validate="options"
+        >
+            <option value="com_content__article">ATTACH_COM_CONTENT_ARTICLE</option>
+            <option value="com_content__category">ATTACH_COM_CONTENT_CATEGORY</option>
+            <option value="com_jevents__jevent">JEVENT</option>
+        </field>
+        <field
+                type="spacer"
+                name="filename_current"
+                label=""
+                description="Current file name: zyx"
+                showon="uri_type:file"
+        />
     </fieldset>
+    <fieldset name="content_types">
+        <field
+                name="com_content__article"
+                type="modal_article"
+                default=""
+                label="ATTACH_COM_CONTENT_SELECT_ARTICLE"
+                description="ATTACH_COM_CONTENT_SELECT_ARTICLE_DESCRIPTION"
+                addfieldprefix="Joomla\Component\Content\Administrator\Field"
+                showon="parent_type_list:com_content__article"
+        />
+
+        <field
+                name="com_content__category"
+                type="modal_category"
+                default=""
+                label="ATTACH_COM_CONTENT_SELECT_CATEGORY"
+                description="ATTACH_COM_CONTENT_SELECT_CATEGORY_DESCRIPTION"
+                addfieldprefix="Joomla\Component\Categories\Administrator\Field"
+                showon="parent_type_list:com_content__category"
+        />
+        <field
+                name="com_jevents__jevent"
+                type="JEVselectevent"
+                default=""
+                label="ATTACH_SELECT_JEVENT"
+                description="ATTACH_SELECT_JEVENT_DESC"
+                addfieldpath="/administrator/components/com_jevents/fields"
+                showon="parent_type_list:com_jevents__jevent"
+        />
+    </fieldset>
+
 </form>

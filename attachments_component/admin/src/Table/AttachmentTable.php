@@ -211,6 +211,34 @@ class AttachmentTable extends Table
         $this->url_valid = $this->url_valid ? 1 : 0;
         $this->url_relative = $this->url_relative ? 1 : 0;
         $this->url_verify = $this->url_verify ? 1 : 0;
+        if ($this->uri_type === 'url')
+        {
+            $this->filename = '';
+            $this->filename_sys = '';
+            $this->file_type = 'unknown';
+            $this->file_size = 0;
+            $this->icon_filename = 'link.gif';
+        }
+
+        // Set the create/modify dates
+        $now = Factory::getDate();
+        $now = $now->toSql();
+
+        $userId = Factory::getApplication()->getIdentity()->id;
+
+        if (empty($this->created))
+        {
+            $this->created = $now;
+        }
+
+        $this->modified    = $now;
+
+        if (empty($this->created_by))
+        {
+            $this->created_by = $userId;
+        }
+
+        $this->modified_by = $userId;
 
         // Let the parent class do the real work!
         return parent::store($updateNulls);

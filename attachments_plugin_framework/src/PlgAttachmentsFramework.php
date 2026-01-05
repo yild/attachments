@@ -331,6 +331,49 @@ class PlgAttachmentsFramework extends CMSPlugin implements SubscriberInterface
     }
 
     /**
+     * Get the canonical extension entity Name (eg, 'article' instead of 'default')
+     *
+     * This is the canonical Id of content element/item to which attachments will be added.
+     *
+     * Note that each content type ($option) may support several different entities
+     * (for attachments) and some entities may have more than one name.
+     *
+     * Note, for com_content, the default is 'article'
+     *
+     * @access  public
+     *
+     * @param   string  $parentEntity  the type of entity for this parent type
+     *
+     * @return  string  the canonical extension entity
+     *
+     * @throws  Exception
+     *
+     * @since   4.2.0
+     */
+    public function getCanonicalEntityName(string $parentEntity): string
+    {
+        // If it is a known entity, just return it
+        if (is_array($this->entities) && in_array($parentEntity, $this->entities))
+        {
+            return $parentEntity;
+        }
+
+        // Check aliases
+        if (is_array($this->entities) && array_key_exists($parentEntity, $this->entity_name))
+        {
+            return $this->entity_name[$parentEntity];
+        }
+        else
+        {
+            $errMsg = Text::sprintf('PLG_ATTACHMENTS_PLUGIN_ERROR_INVALID_ENTITY_S_FOR_PARENT_S', $parentEntity, $this->parentType) . ' (ERR 300)';
+
+            $this->app->enqueueMessage($errMsg, 'error');
+        }
+
+        return '';
+    }
+
+    /**
      * Get the path for the uploaded file (on the server file system)
      *
      * Note that this does not include the base directory for attachments.
