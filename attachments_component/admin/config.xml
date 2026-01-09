@@ -201,7 +201,7 @@
   <fieldset name="advanced"
 	    label="ATTACH_CONFIG_ADVANCED_SETTINGS_LABEL">
     <field name="max_attachment_size" type="text" size="50" default="0" filter="integer"
-	   label="ATTACH_MAX_ATTACHMENT_SIZE" 
+	   label="ATTACH_MAX_ATTACHMENT_SIZE"
 	   description="ATTACH_MAX_ATTACHMENT_SIZE_DESCRIPTION" />
     <field name="forbidden_filename_characters" type="text" default="#=?%&amp;"
            label="ATTACH_FORBIDDEN_FILENAME_CHARACTERS" size="40"
@@ -259,6 +259,12 @@
 
   <fieldset name="security"
 	    label="ATTACH_CONFIG_SECURITY_SETTINGS_LABEL">
+    <field name="test_is_safe_file" type="radio" default="1" layout="joomla.form.field.radio.switcher"
+           label="ATTACH_TEST_IS_SECURE_FILE"
+           description="ATTACH_TEST_IS_SECURE_FILE_DESCRIPTION">
+      <option value="0">JNO</option>
+      <option value="1">JYES</option>
+    </field>
     <field name="secure" type="radio" default="0" layout="joomla.form.field.radio.switcher"
            label="ATTACH_SECURE_ATTACHMENT_DOWNLOADS"
            description="ATTACH_SECURE_ATTACHMENT_DOWNLOADS_DESCRIPTION">
