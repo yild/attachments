@@ -90,8 +90,9 @@ class AttachmentController extends FormController
     {
         // Fail gracefully if the Attachments plugin framework plugin is disabled
         if (!PluginHelper::isEnabled('attachments', 'framework')) {
-            echo '<h1>' . Text::_('ATTACH_WARNING_ATTACHMENTS_PLUGIN_FRAMEWORK_DISABLED') . '</h1>';
-            return;
+            $this->app->enqueueMessage(Text::_('ATTACH_WARNING_ATTACHMENTS_PLUGIN_FRAMEWORK_DISABLED'));
+
+            return false;
         }
 
         // Access check.
@@ -110,407 +111,136 @@ class AttachmentController extends FormController
             return false;
         }
 
-        $parent_entity = 'default';
+        $parentEntity = 'default';
+        $parentType = $this->input->getString('parent_type', '');
 
-        // Get the parent info
-        $input = $app->getInput();
-        if ($input->getString('article_id')) {
-            $pidarr = explode(',', $input->getString('article_id'));
-            $parent_type = 'com_content';
-        } else {
-            $pidarr = explode(',', $input->getString('parent_id', ''));
-            $parent_type = $input->getCmd('parent_type', 'com_content');
-
-            // If the entity is embedded in the parent type, split them
-            if (strpos($parent_type, '.')) {
-                $parts = explode('.', $parent_type);
-                $parent_type = $parts[0];
-                $parent_entity = $parts[1];
-            }
+        if (strpos($parentType, '.')) {
+            $parentInfo = explode('.', $parentType);
+            $parentType = $parentInfo[0];
+            $parentEntity = $parentInfo[1];
         }
 
-        // Special handling for categories
-        if ($parent_type == 'com_categories') {
-            $parent_type = 'com_content';
-        }
-
-        // Get the parent id and see if the parent is new
-        $parent_id = null;
-        $new_parent = false;
-        if (is_numeric($pidarr[0])) {
-            $parent_id = (int)$pidarr[0];
-        }
-        if ((count($pidarr) == 1) && ($pidarr[0] == '')) {
-            // Called from the [New] button
-            $parent_id = null;
-        }
-        if (count($pidarr) > 1) {
-            if ($pidarr[1] == 'new') {
-                $new_parent = true;
-            }
-        }
-
-        // Set up the "select parent" button
-        PluginHelper::importPlugin('attachments');
-        $apm = AttachmentsPluginManager::getAttachmentsPluginManager();
-        $entity_info = $apm->getInstalledEntityInfo();
-        $parent = $apm->getAttachmentsPlugin($parent_type);
-
-        $parent_entity = $parent->getCanonicalEntityId($parent_entity);
-        $parent_entity_name = Text::_('ATTACH_' . $parent_entity);
-
-        if (!$parent_id) {
-            // Set up the necessary javascript
-            AttachmentsJavascript::setupJavascript();
-
-            $document = $app->getDocument();
-            $js = ' 
-	   function jSelectParentArticle(id, title, catid, object) {
-		   document.getElementById("parent_id").value = id;
-		   document.getElementById("parent_title").value = title;
-		   let modal = bootstrap.Modal.getInstance(document.getElementById("modal-attachment"));
-		   modal.hide();
-		   }';
-            $document->addScriptDeclaration($js);
-        } else {
-            if (!is_numeric($parent_id)) {
-                $errmsg = Text::sprintf('ATTACH_ERROR_INVALID_PARENT_ID_S', $parent_id) . ' (ERR 122)';
-                throw new \Exception($errmsg, 500);
-            }
+        if (($parentType == '') || ($parentType == 'com_categories')) {
+            $parentType = 'com_content';
         }
 
         // Use a component template for the iframe view (from the article editor)
-        $from = $input->getWord('from');
+        $from = $this->input->getWord('from', '');
         if ($from == 'closeme') {
-            $input->set('tmpl', 'component');
+            $this->input->set('tmpl', 'component');
         }
 
-        // Disable the main menu items
-        $input->set('hidemainmenu', 1);
-
-        // Get the article title
-        $parent_title = false;
-        if (!$new_parent) {
-            PluginHelper::importPlugin('attachments');
-            $apm = AttachmentsPluginManager::getAttachmentsPluginManager();
-            if (!$apm->attachmentsPluginInstalled($parent_type)) {
-                // Exit if there is no Attachments plugin to handle this parent_type
-                $errmsg = Text::sprintf('ATTACH_ERROR_INVALID_PARENT_TYPE_S', $parent_type) . ' (ERR 123)';
-                throw new \Exception($errmsg, 500);
-            }
-            $parent = $apm->getAttachmentsPlugin($parent_type);
-            $parent_title = $parent->getTitle($parent_id, $parent_entity);
-        }
-
-        // Determine the type of upload
-        $default_uri_type = 'file';
-        $uri_type = $input->getWord('uri', $default_uri_type);
-        if (!in_array($uri_type, AttachmentsDefines::$LEGAL_URI_TYPES)) {
-            // Make sure only legal values are entered
-        }
-
-        // Get the component parameters
-        $params = ComponentHelper::getParams('com_attachments');
-
-        // Set up the view
-        $document = $app->getDocument();
-        $view = $this->getView('Add', $document->getType(), 'Administrator', ['option' => $this->option]);
-
-        $this->addViewUrls($view, 'upload', $parent_id, $parent_type, null, $from);
-        // ??? Move the addViewUrls function to attachments base view class
-
-        // We do not have a real attachment yet so fake it
-        $attachment = new \stdClass();
-
-        $attachment->uri_type = $uri_type;
-        $attachment->state  = $params->get('publish_default', false);
-        $attachment->url = '';
-        $attachment->url_relative = false;
-        $attachment->url_verify = true;
-        $attachment->display_name = '';
-        $attachment->description = '';
-        $attachment->user_field_1 = '';
-        $attachment->user_field_2 = '';
-        $attachment->user_field_3 = '';
-        $attachment->parent_id     = $parent_id;
-        $attachment->parent_type   = $parent_type;
-        $attachment->parent_entity = $parent_entity;
-        $attachment->parent_title  = $parent_title;
-
-        $view->attachment = $attachment;
-
-        $view->parent        = $parent;
-        $view->new_parent    = $new_parent;
-        $view->may_publish   = $parent->userMayChangeAttachmentState($parent_id, $parent_entity, $user->id);
-        $view->entity_info   = $entity_info;
-        $view->from          = $from;
-
-        $view->params        = $params;
-
-        // Display the add form
-        $view->display();
+        // Redirect to the edit screen.
+        $this->setRedirect(
+            Route::_(
+                'index.php?option=' . $this->option
+                . '&view=' . $this->view_item
+                . $this->getRedirectToItemAppend()
+                . '&parent_type=' . $parentType . '.' . $parentEntity
+                . '&parent_id=' . $this->input->getInt('parent_id')
+                . '&from=' . $this->input->getString('from')
+                . '&editor=' . $this->input->getString('editor'), false)
+        );
     }
-
-
 
     /**
      * Save an new attachment
      */
     public function saveNew()
     {
-        // Check for request forgeries
-        Session::checkToken() or die(Text::_('JINVALID_TOKEN'));
+        // Check if plugins are enabled
+        if (!PluginHelper::isEnabled('attachments', 'framework')) {
+            $this->app->enqueueMessage(Text::_('ATTACH_WARNING_ATTACHMENTS_PLUGIN_FRAMEWORK_DISABLED'), 'error');
 
-        // Access check.
-        $app = $this->app;
-        $user = $app->getIdentity();
-        if ($user === null || !$user->authorise('core.create', 'com_attachments')) {
-            throw new \Exception(Text::_('JERROR_ALERTNOAUTHOR') . ' (ERR 124)', 403);
+            return false;
         }
 
-        // Make sure we have a user
-        if ($user->get('username') == '') {
-            $errmsg = Text::_('ATTACH_ERROR_MUST_BE_LOGGED_IN_TO_UPLOAD_ATTACHMENT') . ' (ERR 125)';
-            throw new \Exception($errmsg, 500);
+        // Check for request forgeries.
+        Session::checkToken();
+
+        $model = $this->getModel();
+        $data = $this->input->post->get('jform', [], 'array');
+        $currentUri = (string)Uri::getInstance();
+
+        if (!$this->allowSave($data)) {
+            $this->setMessage(Text::_('JLIB_APPLICATION_ERROR_SAVE_NOT_PERMITTED'), 'error');
+
+            return false;
         }
 
-        // Get the article/parent handler
-        $input = $this->input;
-        $new_parent = $input->getBool('new_parent', false);
-        $parent_type = $input->getCmd('parent_type', 'com_content');
-        $parent_entity = $input->getCmd('parent_entity', 'default');
+        // Validate the posted data.
+        $form = $model->getForm($data, false);
 
-        // Special handling for categories
-        if ($parent_type == 'com_categories') {
-            $parent_type = 'com_content';
+        if (!$form) {
+            throw new Exception($model->getError(), 500);
         }
 
-        // Exit if there is no Attachments plugin to handle this parent_type
-        PluginHelper::importPlugin('attachments');
-        $apm = AttachmentsPluginManager::getAttachmentsPluginManager();
-        if (!$apm->attachmentsPluginInstalled($parent_type)) {
-            $errmsg = Text::sprintf('ATTACH_ERROR_INVALID_PARENT_TYPE_S', $parent_type) . ' (ERR 126)';
-            throw new \Exception($errmsg, 500);
-        }
-        $parent = $apm->getAttachmentsPlugin($parent_type);
-        $parent_entity = $parent->getCanonicalEntityId($parent_entity);
-        $parent_entity_name = Text::_('ATTACH_' . $parent_entity);
+        $validData = $model->validate($form, $data);
 
-        // Make sure we have a valid parent ID
-        $parent_id = $input->getInt('parent_id', null);
+        // Check for validation errors.
+        if ($validData === false) {
+            // Get the validation messages.
+            $errors = $model->getErrors();
 
-        if (
-            !$new_parent && (($parent_id === 0) ||
-                              ($parent_id == null) ||
-                              !$parent->parentExists($parent_id, $parent_entity))
-        ) {
-            // Warn the user to select an article/parent in a popup
-            $errmsg = Text::sprintf('ATTACH_ERROR_MUST_SELECT_PARENT_S', $parent_entity_name);
-            echo "<script type=\"text/javascript\"> alert('$errmsg'); window.history.go(-1); </script>\n";
-            exit();
-        }
-
-        // Make sure this user has permission to upload
-        if (!$parent->userMayAddAttachment($parent_id, $parent_entity, $new_parent)) {
-            $errmsg = Text::sprintf('ATTACH_ERROR_NO_PERMISSION_TO_UPLOAD_S', $parent_entity_name) . ' (ERR 127)';
-            throw new \Exception($errmsg, 403);
-        }
-
-        // Set up the new record
-        /** @var \JMCameron\Component\Attachments\Administrator\Model\AttachmentModel $model */
-        $model      = $this->getModel();
-        $attachment = $model->getTable();
-
-        if (!$attachment->bind($input->post->getArray())) {
-            $errmsg = $attachment->getError() . ' (ERR 128)';
-            throw new \Exception($errmsg, 500);
-        }
-        $attachment->parent_type = $parent_type;
-        $parent->new = $new_parent;
-
-        // Note the parents id and title
-        if ($new_parent) {
-            $attachment->parent_id = null;
-            $parent->title = '';
-        } else {
-            $attachment->parent_id = $parent_id;
-            $parent->title = $parent->getTitle($parent_id, $parent_entity);
-        }
-
-        // Upload the file!
-
-        // Handle 'from' clause
-        $from = $input->getWord('from');
-
-        // See if we are uploading a file or URL
-        $new_uri_type = $input->getWord('uri_type');
-        if ($new_uri_type && !in_array($new_uri_type, AttachmentsDefines::$LEGAL_URI_TYPES)) {
-            // Make sure only legal values are entered
-            $new_uri_type = '';
-        }
-
-        // If this is a URL, get settings
-        $verify_url = false;
-        $relative_url = false;
-        if ($new_uri_type == 'url') {
-            // See if we need to verify the URL (if applicable)
-            if ($input->getWord('verify_url') == 'verify') {
-                $verify_url = true;
-            }
-            // Allow relative URLs?
-            if ($input->getWord('url_relative') == 'relative') {
-                $relative_url = true;
-            }
-        }
-
-        // Update the url checkbox fields
-        $attachment->url_relative = $relative_url ? 1 : 0;
-        $attachment->url_verify = $verify_url ? 1 : 0;
-
-        // Update create/modify info
-        $attachment->created_by = $user->get('id');
-        $attachment->modified_by = $user->get('id');
-
-        PluginHelper::importPlugin('content');
-
-        // Upload new file/url and create the attachment
-        $msg = '';
-        $msgType = 'message';
-        $error = false;
-        if ($new_uri_type == 'file') {
-            // Set up the parent entity to save
-            $attachment->parent_entity = $parent_entity;
-
-            // Upload a new file
-            $result = AttachmentsHelper::uploadFile($attachment, $parent, false, 'upload');
-            // NOTE: store() is not needed if uploadFile() is called since it does it
-
-            if (is_object($result)) {
-                $error = true;
-                $msg = $result->error_msg . ' (ERR 129)';
-                $msgType = 'error';
-            } else {
-                $msg = $result;
-            }
-        } elseif ($new_uri_type == 'url') {
-            // Extra handling for checkboxes for URLs
-            $attachment->url_relative = $relative_url;
-            $attachment->url_verify = $verify_url;
-
-            // Upload/add the new URL
-            $result = AttachmentsHelper::addUrl($attachment, $parent, $verify_url, $relative_url);
-            // NOTE: store() is not needed if addUrl() is called since it does it
-
-            if (is_object($result)) {
-                $error = true;
-                $msg = $result->error_msg . ' (ERR 130)';
-                $msgType = 'error';
-            } else {
-                $msg = $result;
-            }
-        } else {
-            // Set up the parent entity to save
-            $attachment->parent_entity = $parent_entity;
-
-            $app->triggerEvent('onContentBeforeSave', [
-                'com_attachments.attachment',
-                $attachment,
-                true,
-                $attachment->getProperties()
-            ]);
-
-            // Save the updated attachment info
-            if (!$attachment->store()) {
-                $errmsg = $attachment->getError() . ' (ERR 131)';
-                throw new \Exception($errmsg, 500);
-            }
-            $msg = Text::_('ATTACH_ATTACHMENT_UPDATED');
-        }
-
-        $app->triggerEvent('onContentAfterSave', [
-            'com_attachments.attachment',
-            $attachment,
-            true,
-            $attachment->getProperties()
-        ]);
-
-        // See where to go to next
-        $task = $this->getTask();
-
-        switch ($task) {
-            case 'applyNew':
-                if ($error) {
-                    $link = 'index.php?option=com_attachments&task=attachment.add&parent_id=' . (int)$parent_id;
-                    $link .= "&parent_type={$parent_type}.{$parent_entity}&editor=add_to_parent";
+            // Push up to three validation messages out to the user.
+            for ($i = 0, $n = count($errors); $i < $n && $i < 3; $i++) {
+                if ($errors[$i] instanceof Exception) {
+                    $this->app->enqueueMessage($errors[$i]->getMessage(), 'warning');
                 } else {
-                    $link = 'index.php?option=com_attachments&task=attachment.edit&cid[]=' . (int)$attachment->id;
+                    $this->app->enqueueMessage($errors[$i], 'warning');
                 }
-                break;
-
-            case 'save2New':
-                if ($error) {
-                    $link = 'index.php?option=com_attachments&task=attachment.add&parent_id=' . (int)$parent_id;
-                    $link .= "&parent_type={$parent_type}.{$parent_entity}&editor=add_to_parent";
-                } else {
-                    $link = 'index.php?option=com_attachments&task=attachment.add&parent_id=' . (int)$parent_id;
-                    $link .= "&parent_type={$parent_type}.{$parent_entity}&editor=add_to_parent";
-                }
-                break;
-
-            case 'saveNew':
-            default:
-                if ($error) {
-                    $link = 'index.php?option=com_attachments&task=attachment.add&parent_id=' . (int)$parent_id;
-                    $link .= "&parent_type={$parent_type}.{$parent_entity}&editor=add_to_parent";
-                } else {
-                    $link = 'index.php?option=com_attachments';
-                }
-                break;
-        }
-
-        // If called from the editor, go back to it
-        if ($from == 'editor') {
-            // ??? This is probably obsolete
-            $link = 'index.php?option=com_content&task=edit&cid[]=' . $parent_id;
-        }
-
-        // If we are supposed to close this iframe, do it now.
-        if ($from == 'closeme') {
-            // If there has been a problem, alert the user and redisplay
-            if ($msgType == 'error') {
-                $errmsg = $msg;
-                if (DIRECTORY_SEPARATOR == "\\") {
-                    // Fix filename on Windows system so alert can display it
-                    $errmsg = str_replace(DIRECTORY_SEPARATOR, "\\\\", $errmsg);
-                }
-                $errmsg = str_replace("'", "\'", $errmsg);
-                $errmsg = str_replace("<br />", "\\n", $errmsg);
-                echo "<script type=\"text/javascript\"> alert('$errmsg');  window.history.go(-1); </script>";
-                exit();
             }
 
-            // If there is no parent_id, the parent is being created, use the username instead
-            if ($new_parent) {
-                $pid = 0;
-            } else {
-                $pid = (int)$parent_id;
-            }
+            // Save the data in the session.
+            $this->app->setUserState('com_attachments.edit.attachment.data', $data);
 
+            // Redirect back to the same screen.
+            $this->setRedirect($currentUri);
+
+            return false;
+        }
+
+        if (!$model->save($validData)) {
+            // Save the data in the session.
+            $this->app->setUserState('com_attachments.edit.attachment.data', $data);
+
+            $this->setMessage(Text::sprintf('JLIB_APPLICATION_ERROR_SAVE_FAILED', $model->getError()), 'error');
+
+            // Redirect back to the edit screen.
+            $this->setRedirect($currentUri);
+
+            return false;
+        }
+
+        $this->setMessage(Text::_('ATTACH_ATTACHMENT_SAVED'));
+
+        $from = $data['from'];
+
+        if ($from === 'closeme') {
             // Close the iframe and refresh the attachments list in the parent window
-            $base_url = Uri::base(true);
-            $lang = $input->getCmd('lang', '');
-            AttachmentsJavascript::closeIframeRefreshAttachments(
-                $base_url,
-                $parent_type,
-                $parent_entity,
-                $pid,
+            $uri = Uri::getInstance();
+            $baseUrl = $uri->base(true);
+            $lang = $this->input->getCmd('lang', '');
+
+            AttachmentsJavascriptHelper::closeModalAndRefreshAttachments(
+                $baseUrl,
+                $validData['parent_type'],
+                $validData['parent_entity'],
+                (int)$validData[$validData['parent_type_list']],
                 $lang,
-                $from
+                $from,
+                'save'
             );
-            exit();
+        } else {
+            $this->setRedirect(
+                Route::_('index.php?option=com_attachments&view=attachments' . $this->getRedirectToListAppend(), false)
+            );
         }
 
-        $this->setRedirect($link, $msg, $msgType);
+        // Clear the ancillary data from the session.
+        $this->app->setUserState('com_attachments.edit.attachment.data', null);
+
+        return true;
     }
 
 
@@ -538,201 +268,11 @@ class AttachmentController extends FormController
             throw new \Exception(Text::_('ATTACH_ERROR_NO_PERMISSION_TO_EDIT') . ' (ERR 132)', 403);
         }
 
-        $uri = Uri::getInstance();
+        // TODO remove this hack in next revision
+        // default parent::edit() expects cid sent by POST request
+        $this->input->post->set('cid', $this->input->get('cid', [], 'int'));
 
-        /** @var \JMCameron\Component\Attachments\Administrator\Model\AttachmentModel $model */
-        $model      = $this->getModel();
-        $attachment = $model->getTable();
-
-        $input = $app->getInput();
-        $cid = $input->get('cid', array(0), 'array');
-        $change = $input->getWord('change', '');
-        $change_parent = ($change == 'parent');
-        $attachment_id = (int)$cid[0];
-
-        // Get the attachment data
-        $attachment = $model->getItem($attachment_id);
-
-        $from = $input->getWord('from');
-        $layout = $input->getWord('tmpl');
-
-        // Fix the URL for files
-        if ($attachment->uri_type == 'file') {
-            $attachment->url = $uri->root(true) . '/' . $attachment->url;
-        }
-
-        $parent_id = $attachment->parent_id;
-        $parent_type = $attachment->parent_type;
-        $parent_entity = $attachment->parent_entity;
-
-        // Get the parent handler
-        PluginHelper::importPlugin('attachments');
-        $apm = AttachmentsPluginManager::getAttachmentsPluginManager();
-        if (!$apm->attachmentsPluginInstalled($parent_type)) {
-            // Exit if there is no Attachments plugin to handle this parent_type
-            $errmsg = Text::sprintf('ATTACH_ERROR_INVALID_PARENT_TYPE_S', $parent_type) . ' (ERR 133)';
-            throw new \Exception($errmsg, 500);
-        }
-        $entity_info = $apm->getInstalledEntityInfo();
-        $parent = $apm->getAttachmentsPlugin($parent_type);
-
-        // Get the parent info
-        $parent_entity_name = Text::_('ATTACH_' . $parent_entity);
-        $parent_title = $parent->getTitle($parent_id, $parent_entity);
-        if (!$parent_title) {
-            $parent_title = Text::sprintf('ATTACH_NO_PARENT_S', $parent_entity_name);
-        }
-        $attachment->parent_entity_name = $parent_entity_name;
-        $attachment->parent_title = $parent_title;
-        $attachment->parent_published = $parent->isParentPublished($parent_id, $parent_entity);
-        $update = $input->getWord('update');
-        if ($update && !in_array($update, AttachmentsDefines::$LEGAL_URI_TYPES)) {
-            $update = false;
-        }
-
-        // Set up view for changing parent
-        $document = $app->getDocument();
-        if ($change_parent) {
-            $js = " 
-	   function jSelectParentArticle(id, title) {
-		   document.getElementById('parent_id').value = id;
-		   document.getElementById('parent_title').value = title;
-		   window.parent.bootstrap.Modal.getInstance(window.parent.document.querySelector('.joomla-modal.show')).hide();
-		   };" ;
-            $document->addScriptDeclaration($js);
-        }
-
-        // See if a new type of parent was requested
-        $new_parent_type = '';
-        $new_parent_entity = 'default';
-        $new_parent_entity_name = '';
-        if ($change_parent) {
-            $new_parent_type = $input->getCmd('new_parent_type');
-            if ($new_parent_type) {
-                if (strpos($new_parent_type, '.')) {
-                    $parts = explode('.', $new_parent_type);
-                    $new_parent_type = $parts[0];
-                    $new_parent_entity = $parts[1];
-                }
-
-                $new_parent = $apm->getAttachmentsPlugin($new_parent_type);
-                $new_parent_entity = $new_parent->getCanonicalEntityId($new_parent_entity);
-                $new_parent_entity_name = Text::_('ATTACH_' . $new_parent_entity);
-
-                // Set up the 'select parent' button
-                $selpar_label = Text::sprintf('ATTACH_SELECT_ENTITY_S_COLON', $new_parent_entity_name);
-                $selpar_btn_text = '&nbsp;' .
-                Text::sprintf(
-                    'ATTACH_SELECT_ENTITY_S',
-                    $new_parent_entity_name
-                ) . '&nbsp;';
-                $selpar_btn_tooltip = Text::sprintf('ATTACH_SELECT_ENTITY_S_TOOLTIP', $new_parent_entity_name);
-
-                $selpar_btn_url = $new_parent->getSelectEntityURL($new_parent_entity);
-                $selpar_parent_title = '';
-                $selpar_parent_id = '-1';
-            } else {
-                // Set up the 'select parent' button
-                $selpar_label = Text::sprintf('ATTACH_SELECT_ENTITY_S_COLON', $attachment->parent_entity_name);
-                $selpar_btn_text = '&nbsp;' .
-                    Text::sprintf('ATTACH_SELECT_ENTITY_S', $attachment->parent_entity_name) . '&nbsp;';
-                $selpar_btn_tooltip = Text::sprintf('ATTACH_SELECT_ENTITY_S_TOOLTIP', $attachment->parent_entity_name);
-                $selpar_btn_url = $parent->getSelectEntityURL($parent_entity);
-                $selpar_parent_title = $attachment->parent_title;
-                $selpar_parent_id = $attachment->parent_id;
-            }
-        }
-
-        $change_parent_url = $uri->base(true) .
-            "/index.php?option=com_attachments&amp;task=attachment.edit&amp;cid[]=$attachment_id&amp;change=parent";
-        if ($layout) {
-            $change_parent_url .= "&amp;from=$from&amp;tmpl=$layout";
-        }
-
-        // Get the component parameters
-        $params = ComponentHelper::getParams('com_attachments');
-
-        // Set up the view
-        $document = $app->getDocument();
-        $view = $this->getView('Edit', $document->getType(), 'Administrator', ['option' => $this->option]);
-
-        $this->addViewUrls(
-            $view,
-            'update',
-            $parent_id,
-            $parent_type,
-            $attachment_id,
-            $from
-        );
-
-        // Update change URLS to remember if we want to change the parent
-        if ($change_parent) {
-            $view->change_file_url   .= "&amp;change=parent&amp;new_parent_type=$new_parent_type";
-            $view->change_url_url    .= "&amp;change=parent&amp;new_parent_type=$new_parent_type";
-            $view->normal_update_url .= "&amp;change=parent&amp;new_parent_type=$new_parent_type";
-            if ($new_parent_entity != 'default') {
-                $view->change_file_url   .= ".$new_parent_entity";
-                $view->change_url_url    .= ".$new_parent_entity";
-                $view->normal_update_url .= ".$new_parent_entity";
-            }
-        }
-
-        // Add a few necessary things for iframe popups
-        if ($layout) {
-            $view->change_file_url   .= "&amp;from=$from&amp;tmpl=$layout";
-            $view->change_url_url    .= "&amp;from=$from&amp;tmpl=$layout";
-            $view->normal_update_url .= "&amp;from=$from&amp;tmpl=$layout";
-        }
-
-        // Suppress the display filename if we are switching from file to url
-        $display_name = $attachment->display_name;
-        if ($update && ($update != $attachment->uri_type)) {
-            $attachment->display_name = '';
-        }
-
-        // Handle iframe popup requests
-        $known_froms = $parent->knownFroms();
-        $in_popup = false;
-        $save_url = 'index.php';
-        if (in_array($from, $known_froms)) {
-            $in_popup = true;
-            AttachmentsJavascript::setupJavascript();
-            $save_url = 'index.php?option=com_attachments&amp;task=attachment.save';
-        }
-        $view->save_url = $save_url;
-        $view->in_popup = $in_popup;
-
-        // Set up the access field
-        $view->access_level_tooltip = Text::_('JFIELD_ACCESS_LABEL') . '::' . Text::_('JFIELD_ACCESS_DESC');
-        $view->access_level = AccessLevelsField::getAccessLevels('access', 'access', $attachment->access);
-
-        // Set up view info
-        $view->update            = $update;
-        $view->change_parent     = $change_parent;
-        $view->new_parent_type   = $new_parent_type;
-        $view->new_parent_entity = $new_parent_entity;
-        $view->change_parent_url = $change_parent_url;
-        $view->entity_info       = $entity_info;
-        $view->may_publish       = $parent->userMayChangeAttachmentState($parent_id, $parent_entity, $user->id);
-
-        $view->from       = $from;
-
-        $view->attachment = $attachment;
-
-        $view->parent     = $parent;
-        $view->params     = $params;
-
-        // Set up for selecting a new type of parent
-        if ($change_parent) {
-            $view->selpar_label =       $selpar_label;
-            $view->selpar_btn_text =        $selpar_btn_text;
-            $view->selpar_btn_tooltip =     $selpar_btn_tooltip;
-            $view->selpar_btn_url =         $selpar_btn_url;
-            $view->selpar_parent_title =  $selpar_parent_title;
-            $view->selpar_parent_id =   $selpar_parent_id;
-        }
-
-        $view->display();
+        return parent::edit();
     }
 
 
@@ -1172,9 +712,6 @@ class AttachmentController extends FormController
         AttachmentsHelper::downloadAttachment($id);
     }
 
-
-
-
     /**
      * Put up a dialog to double-check before deleting an attachment
      */
@@ -1248,6 +785,7 @@ class AttachmentController extends FormController
 
     public function cancel($key = null)
     {
+        $this->app->setUserState('com_attachments.edit.attachment.data', null);
         $this->setRedirect(Route::_('index.php?option=' . $this->option, false));
     }
 }
